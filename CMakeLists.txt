@@ -8,4 +8,6 @@ set(COMMON_FLAGS "-Os")
 project(JukeBox)
 
 create_simple_executable(${PROJECT_NAME}
-    ${PROJECT_NAME})
+    ${PROJECT_NAME}
+    Speaker
+    FrequencyComparator)

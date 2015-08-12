@@ -23,58 +23,17 @@
  * SOFTWARE.
  */
 
-#include <PropWare/pin.h>
 #include <PropWare/printer/printer.h>
 #include <PropWare/scanner.h>
 #include <PropWare/runnable.h>
 #include <PropWare/staticstringbuilder.h>
 #include <PropWare/c++allocate.h>
 
-const unsigned int MIN_FREQUENCY      = 200;
-const unsigned int MAX_FREQUENCY      = 20000;
+#include "Speaker.h"
+#include "FrequencyComparator.h"
+
 const unsigned int CHANNELS           = 1;
 const char         FAILURE_RESPONSE[] = "Enter a frequency between 200 and 20,000 (no comma). 0 for off";
-
-class Speaker : public PropWare::Runnable {
-    public:
-        Speaker (const uint32_t *stack, const size_t stackSizeInBytes, const PropWare::Pin::Mask pinMask)
-                : Runnable(stack, stackSizeInBytes),
-                  m_currentFrequency(0) {
-            this->m_pin.set_mask(pinMask);
-        }
-
-
-        virtual void run () {
-            unsigned int delay;
-
-            this->m_pin.set_dir_out();
-            while (1) {
-                while (!this->m_currentFrequency);
-                delay = SECOND / this->m_currentFrequency;
-                this->m_pin.toggle();
-                waitcnt(delay + CNT);
-            }
-        }
-
-        void set_frequency (const unsigned int frequency) {
-            this->m_currentFrequency = frequency;
-        }
-
-    private:
-        PropWare::Pin         m_pin;
-        volatile unsigned int m_currentFrequency;
-};
-
-class FrequencyDude : public PropWare::Comparator<unsigned int> {
-    public:
-        FrequencyDude () { }
-
-        virtual bool valid (const unsigned int *lhs) const {
-            return 0 == *lhs || (MIN_FREQUENCY <= *lhs && *lhs <= MAX_FREQUENCY);
-        }
-};
-
-const FrequencyDude frequencyDude;
 
 void start_speakers (Speaker **speakers, const size_t channels) {
     uint32_t          *stack;
@@ -87,7 +46,7 @@ void start_speakers (Speaker **speakers, const size_t channels) {
     waitcnt(MILLISECOND + CNT);
 }
 
-void fill_buffer (unsigned int *frequencyBuffers[], const unsigned int notesPerChannel) {
+void read_notes_from_prompt (unsigned int **frequencyBuffers, const unsigned int notesPerChannel) {
     char                          inputPromptBuffer[512];
     PropWare::StaticStringBuilder inputPrompt(inputPromptBuffer);
     PropWare::Printer             inputPromptPrinter(&inputPrompt);
@@ -97,7 +56,7 @@ void fill_buffer (unsigned int *frequencyBuffers[], const unsigned int notesPerC
         for (unsigned int channel = 0; channel < CHANNELS; ++channel) {
             inputPrompt.clear();
             inputPromptPrinter << "Please input the next frequency for channel " << channel << ": ";
-            pwIn.input_prompt(inputPromptBuffer, FAILURE_RESPONSE, &frequency, frequencyDude);
+            pwIn.input_prompt(inputPromptBuffer, FAILURE_RESPONSE, &frequency, FREQUENCY_COMPARATOR);
             frequencyBuffers[channel][note] = frequency;
         }
     }
@@ -117,7 +76,7 @@ int main () {
             for (unsigned int i = 0; i < CHANNELS; ++i)
                 frequencyBuffers[i] = (unsigned int *) malloc(sizeof(**frequencyBuffers) * notesPerChannel);
 
-            fill_buffer((unsigned int **) frequencyBuffers, notesPerChannel);
+            read_notes_from_prompt((unsigned int **) frequencyBuffers, notesPerChannel);
 
             for (unsigned int i = 0; i < notesPerChannel; ++i) {
                 for (unsigned int channel = 0; channel < CHANNELS; ++channel)
